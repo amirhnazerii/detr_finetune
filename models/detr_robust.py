@@ -140,8 +140,12 @@ class SetCriterion(nn.Module):
 
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes, **kwargs):
-        assert loss == 'labels', f"Only 'labels' loss should be used, got {loss}"
-        return self.loss_labels(outputs, targets, indices, num_boxes, **kwargs)
+        loss_map = {
+            'labels': self.loss_labels,
+        }
+        assert loss in loss_map, f"Only 'labels' loss should be used, but got {loss}"
+        return loss_map[loss](outputs, targets, indices, num_boxes, **kwargs)
+
 
 
     def forward(self, outputs, targets):
@@ -247,7 +251,8 @@ def build(args):
         weight_dict.update(aux_weight_dict)
     weight_dict['loss_center'] = 0.01
 
-    losses = ['labels', 'boxes', 'cardinality']
+#     losses = ['labels', 'boxes', 'cardinality']
+    losses = ['labels']
     if args.masks:
         losses += ["masks"]
 
