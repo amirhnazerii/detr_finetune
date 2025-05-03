@@ -87,7 +87,7 @@ class Modified_DETR(nn.Module):
 
 
 class SetCriterion(nn.Module):
-    def __init__(self, num_classes, matcher, weight_dict, eos_coef, losses, center_loss=None, center_loss_weight=0.01):
+    def __init__(self, num_classes, matcher, weight_dict, eos_coef, losses, center_loss=None, center_loss_weight=0.1):
         super().__init__()
         self.num_classes = num_classes
         self.matcher = matcher
@@ -118,14 +118,44 @@ class SetCriterion(nn.Module):
         if log:
             losses['class_error'] = 100 - accuracy(src_logits[idx], target_classes_o)[0]
 
-        if self.center_loss_fn is not None: # ''''and 'features' in outputs''''
-#             features = outputs['features'][idx]
-            features = outputs['pred_logits'][idx]
-            center_loss_val = self.center_loss_fn(features, target_classes_o)
-            losses['loss_center'] = self.center_loss_weight * center_loss_val
+#         if self.center_loss_fn is not None: # ''''and 'features' in outputs''''
+# #             features = outputs['features'][idx]
+#             features = outputs['pred_logits'][idx]
+#             center_loss_val = self.center_loss_fn(features, target_classes_o)
 
+#             losses['loss_center'] = self.center_loss_weight * center_loss_val
+        if self.center_loss_fn is not None:
+            logits = outputs['pred_logits'][idx]
+
+            #Step 1: Normalize logits for center loss stability
+            logits = F.normalize(logits, p=2, dim=1)
+
+            #Step 2: Filter out invalid/padding classes
+            valid = target_classes_o < self.num_classes
+            logits = logits[valid]
+            labels = target_classes_o[valid]
+
+            if logits.numel() > 0:
+                center_loss_val = self.center_loss_fn(logits, labels)
+
+                #step 3: Clamp to prevent large loss values
+                center_loss_val = torch.clamp(center_loss_val, max=100.0)
+
+                #Step 4: Check for NaN
+                if torch.isnan(center_loss_val):
+                    print("Warning: NaN detected in center loss. Skipping.")
+                else:
+                    losses['loss_center'] = self.center_loss_weight * center_loss_val
+            else:
+                print("Skipped center loss: no valid class targets")
+
+     
+            
         return losses
 
+    
+    
+    
     def _get_src_permutation_idx(self, indices):
         batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(indices)])
         src_idx = torch.cat([src for (src, _) in indices])
