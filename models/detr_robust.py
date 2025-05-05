@@ -87,7 +87,7 @@ class Modified_DETR(nn.Module):
 
 
 class SetCriterion(nn.Module):
-    def __init__(self, num_classes, matcher, weight_dict, eos_coef, losses, center_loss=None, center_loss_weight=0.1):
+    def __init__(self, num_classes, matcher, weight_dict, eos_coef, losses, center_loss=None, center_loss_weight=None):
         super().__init__()
         self.num_classes = num_classes
         self.matcher = matcher
@@ -253,6 +253,7 @@ def build(args):
             aux_loss=args.aux_loss,
             new_layer_dim=args.new_layer_dim
         )
+        
         center_loss_module = CenterLoss(
             num_classes=num_classes,
             out_dim=num_classes + 1,
@@ -292,7 +293,8 @@ def build(args):
         weight_dict=weight_dict,
         eos_coef=args.eos_coef,
         losses=losses,
-        center_loss=center_loss_module
+        center_loss=center_loss_module,
+        center_loss_weight=args.center_loss_weight
     )
     criterion.to(device)
 

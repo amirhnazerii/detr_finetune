@@ -87,6 +87,8 @@ def get_args_parser():
                         help="Disables auxiliary decoding losses (loss at each layer)")
     parser.add_argument('--inter_class_weight', default=None, type=float,
                     help="Weight for inter-class distance maximization in CenterLoss - amirhnazerii 5/2/2025")
+    parser.add_argument('--center_loss_weight', default=None, type=float,
+                    help="coefficient to confine intra-class CenterLoss - amirhnazerii 5/2/2025")
 
     
     # * Matcher
