@@ -101,16 +101,26 @@ def get_args_parser():
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+    
+    ########################################
+    
+    # * Classification head
+    parser.add_argument('--new_layer_dim', default=None, type=int,
+                        help="classification head added fc-layer dim")
+   
+    # robustness param:
+    parser.add_argument('--robust', default=False, type=bool,
+                        help='nrobust detr training with modified loss function.')
+    
     return parser
 
 
 def main(args):
-    utils.init_distributed_mode(args)
-    print("git:\n  {}\n".format(utils.get_sha()))
-
-    if args.frozen_weights is not None:
-        assert args.masks, "Frozen training is meant for segmentation only"
-    print(args)
+    if args.world_size > 1:
+        utils.init_distributed_mode(args)  # Enable distributed mode if running on multiple GPUs
+        print("git:\n  {}\n".format(utils.get_sha()))
+    else:
+        args.distributed = False  # Force single GPU mode
 
     device = torch.device(args.device)
 
@@ -160,53 +170,53 @@ def main(args):
                                  drop_last=False, collate_fn=utils.collate_fn, num_workers=args.num_workers)
 
     
-    ####### modification: 
-    ## split training set size 7481 into new train set size 6000 and validation set size 1481 images. 
+#     ####### modification: 
+#     ## split training set size 7481 into new train set size 6000 and validation set size 1481 images. 
     
-    torch.multiprocessing.set_sharing_strategy('file_system')
+#     torch.multiprocessing.set_sharing_strategy('file_system')
     
-    class Build_Dataset(torch.utils.data.Dataset):
-        'Characterizes a dataset for PyTorch'
-        def __init__(self, images, annotations):
-            'Initialization'
-            self.images = images
-            self.annotations = annotations
+#     class Build_Dataset(torch.utils.data.Dataset):
+#         'Characterizes a dataset for PyTorch'
+#         def __init__(self, images, annotations):
+#             'Initialization'
+#             self.images = images
+#             self.annotations = annotations
 
-        def __len__(self):
-            'Denotes the total number of samples'
-            return len(self.annotations)
+#         def __len__(self):
+#             'Denotes the total number of samples'
+#             return len(self.annotations)
 
-        def __getitem__(self, index):
+#         def __getitem__(self, index):
 
-            # Load data and get label
-            img = self.images[index]
-            label = self.annotations[index]
+#             # Load data and get label
+#             img = self.images[index]
+#             label = self.annotations[index]
 
-            return img, label
+#             return img, label
     
-    img_clean_list =[]
-    annotation_clean_list = []
-    for i, (img, annotation) in enumerate(data_loader_train):
-        # img = img.to(device)
-        img_clean_list.append(img.tensors[0].detach().cpu())
-        annotation_clean_list.append(annotation[0])
-        print(i)
-        if i == 6480/2:
-        # if i == 6480:
+#     img_clean_list =[]
+#     annotation_clean_list = []
+#     for i, (img, annotation) in enumerate(data_loader_train):
+#         # img = img.to(device)
+#         img_clean_list.append(img.tensors[0].detach().cpu())
+#         annotation_clean_list.append(annotation[0])
+#         print(i)
+#         if i == 6480/2:
+#         # if i == 6480:
 
-            print("%d Finished" % i)
-            break
+#             print("%d Finished" % i)
+#             break
         
         
-    print('img_clean_list size:.................', len(img_clean_list) )
-    _dataset_train = Build_Dataset(img_clean_list, annotation_clean_list)
-    _sampler_train = torch.utils.data.SequentialSampler(_dataset_train)
-    del data_loader_train
-    data_loader_train = DataLoader(dataset_train, sampler= _sampler_train,
-                                   collate_fn=utils.collate_fn, num_workers=args.num_workers)
+#     print('img_clean_list size:.................', len(img_clean_list) )
+#     _dataset_train = Build_Dataset(img_clean_list, annotation_clean_list)
+#     _sampler_train = torch.utils.data.SequentialSampler(_dataset_train)
+#     del data_loader_train
+#     data_loader_train = DataLoader(dataset_train, sampler= _sampler_train,
+#                                    collate_fn=utils.collate_fn, num_workers=args.num_workers)
     
     
-    ####### END of modification 
+#     ####### END of modification 
 
     
     
@@ -254,7 +264,7 @@ def main(args):
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
             # extra checkpoint before LR drop and every 100 epochs
-            if (epoch + 1) % args.lr_drop == 0 or (epoch + 1) % 100 == 0:
+            if (epoch + 1) % args.lr_drop == 0 or (epoch + 1) % 2 == 0:
                 checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
@@ -283,7 +293,7 @@ def main(args):
                 (output_dir / 'eval').mkdir(exist_ok=True)
                 if "bbox" in coco_evaluator.coco_eval:
                     filenames = ['latest.pth']
-                    if epoch % 50 == 0:
+                    if epoch % 5 == 0:
                         filenames.append(f'{epoch:03}.pth')
                     for name in filenames:
                         torch.save(coco_evaluator.coco_eval["bbox"].eval,
