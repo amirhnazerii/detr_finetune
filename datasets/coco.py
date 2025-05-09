@@ -112,6 +112,12 @@ class ConvertCocoPolysToMask(object):
         return image, target
 
 
+
+
+    
+    
+
+    
 def make_coco_transforms(image_set):
 
     normalize = T.Compose([
@@ -143,6 +149,36 @@ def make_coco_transforms(image_set):
 
     raise ValueError(f'unknown {image_set}')
 
+    
+    
+
+    
+def make_kitti_transforms(image_set):
+    normalize = T.Compose([
+        T.ToTensor(),
+        T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+
+    if image_set == 'train':
+        return T.Compose([
+            T.RandomHorizontalFlip(p=0.5),  # Flip with moderate probability
+            T.RandomResize([352, 384, 416, 448], max_size=800),  # Match KITTI height
+            normalize,
+        ])
+
+    elif image_set == 'val':
+        return T.Compose([
+            T.Resize((384, 1248)),  # Fixed resize matching KITTI shape while keeping ratio
+            normalize,
+        ])
+    else:
+        raise ValueError(f'Unknown image_set {image_set}')
+
+    
+    
+    
+    
+    
 
 def build(image_set, args):
     root = Path(args.coco_path)
@@ -154,5 +190,10 @@ def build(image_set, args):
     }
 
     img_folder, ann_file = PATHS[image_set]
-    dataset = CocoDetection(img_folder, ann_file, transforms=make_coco_transforms(image_set), return_masks=args.masks)
+    if args.dataset_file == 'kitti':
+        dataset = CocoDetection(img_folder, ann_file, transforms=make_coco_transforms(image_set), return_masks=args.masks)
+    elif args.dataset_file == 'coco':
+        dataset = CocoDetection(img_folder, ann_file, transforms=make_kitti_transforms(image_set), return_masks=args.masks)
+    else:
+        raise ValueError(f'args.dataset_file: {args.dataset_file} is invalid.')
     return dataset
