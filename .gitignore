@@ -1,5 +1,5 @@
 inference_kitti.ipynb
-inference_cityscapes.ipynb
+# inference_cityscapes.ipynb
 
 
 *.err
