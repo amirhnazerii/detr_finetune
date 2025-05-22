@@ -2,6 +2,10 @@ inference_kitti.ipynb
 inference_cityscapes.ipynb
 
 
+*.err
+*.out
+*.ipynb_checkpoints
+
 
 
 .git
@@ -19,3 +23,24 @@ __pycache__
 *.txt
 *.h5
 *.onnx
+
+
+
+Untitled.ipynb
+cityscapes_to_coco.sh
+detr-r50-KITTI-orighead92fc-40epch/
+detr-r50-KITTI-orighead92fc-50epch/
+detr-r50-KITTI-orighead92fc.pth
+detr-r50-cityscapes-orighead-70epch/
+detr-r50-cityscapes-orighead.pth
+detr-r50-modifhead-128fc92fc.pth
+finetune_detr_newhead_robust_batchjob_v1.sh
+finetune_detr_orighead_batchjob_v1.sh
+robust-detr-r50-coco-inter_class_weight0-center_loss_weight01-modifhead-128fc92fc-TEMP/
+robust-detr-r50-coco-inter_class_weight0-center_loss_weight05-modifhead-128fc92fc-TEMP/
+robust-detr-r50-coco-inter_class_weight0-modifhead-128fc92fc-TEMP/
+robust-detr-r50-coco-inter_class_weight01-center_loss_weight05-modifhead-128fc92fc-TEMP/
+util/
+
+
+
