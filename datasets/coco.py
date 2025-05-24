@@ -189,36 +189,52 @@ def make_kitti_transforms(image_set):
     
     
     
-
+    
+ # def make_cityscapes_transforms(image_set):
+#     #### v3: finetune-v3
+#     normalize = T.Compose([
+#         T.ToTensor(),
+#         T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+#     ])
+    
+#     if image_set == 'train':
+#         return T.Compose([
+#             T.RandomHorizontalFlip(p=0.1),
+#             T.RandomResize([720, 800, 1024], max_size=2048),  # Real downscaling
+#             normalize,
+#         ])
+    
+#     elif image_set == 'val':
+#         return T.Compose([
+#             T.RandomResize([720, 800, 1024], max_size=2048),  # 
+#             normalize,
+#         ])
+    
+#     raise ValueError(f'unknown {image_set}')    
+    
+    
 def make_cityscapes_transforms(image_set):
+    #### v4: finetune-v4
     normalize = T.Compose([
         T.ToTensor(),
         T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
-
-    scales = [480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800]
-
+    
     if image_set == 'train':
         return T.Compose([
-            T.RandomHorizontalFlip(),
-            T.RandomSelect(
-                T.RandomResize(scales, max_size=1920),
-                T.Compose([
-                    T.RandomResize([800, 1000, 1200]),
-                    T.RandomSizeCrop(384, 600),
-                    T.RandomResize(scales, max_size=1920),
-                ])
-            ),
+            T.RandomHorizontalFlip(p=0.1),
+            T.RandomResize([1024], max_size=2048),  # Real downscaling
             normalize,
         ])
-
-    if image_set == 'val':
+    
+    elif image_set == 'val':
         return T.Compose([
-            T.RandomResize([800], max_size=1920),
+            T.RandomResize([1024], max_size=2048),  # 
             normalize,
         ])
-
-    raise ValueError(f'unknown {image_set}')    
+    
+    raise ValueError(f'unknown {image_set}')
+ 
     
 
 
