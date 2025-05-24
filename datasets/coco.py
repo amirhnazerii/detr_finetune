@@ -1,4 +1,3 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 """
 COCO dataset which returns image_id for evaluation.
 
@@ -18,6 +17,8 @@ import json
 import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
+
+from pycocotools.coco import COCO
 
 CITYSCAPES_CLASSES = {
     'person': 0, 'rider': 1, 'car': 2, 'truck': 3, 
@@ -40,6 +41,9 @@ class CocoDetection(torchvision.datasets.CocoDetection):
         return img, target
 
 
+        
+    
+    
 def convert_coco_poly_to_mask(segmentations, height, width):
     masks = []
     for polygons in segmentations:
@@ -120,206 +124,6 @@ class ConvertCocoPolysToMask(object):
         target["size"] = torch.as_tensor([int(h), int(w)])
 
         return image, target
-
-
-
-
-    
-class CityscapesDetection(Dataset):
-    def __init__(self, root_dir, ann_dir, transforms=None, return_masks=False, image_set='val'):
-        self.root_dir = root_dir
-        self.ann_dir = ann_dir
-        self.transforms = transforms
-        self.return_masks = return_masks
-        self.image_set = image_set
-        
-        self.images = []
-        self.targets = []
-        
-        # Find all city folders
-        city_folders = [d for d in os.scandir(self.root_dir) if d.is_dir()]
-        
-        # Create COCO-compatible dataset structure
-        self.coco_dataset = {
-            'images': [],
-            'annotations': [],
-            'categories': []
-        }
-        
-        # Add categories
-        for name, id in CITYSCAPES_CLASSES.items():
-            self.coco_dataset['categories'].append({
-                'id': id,
-                'name': name,
-                'supercategory': 'object'
-            })
-        
-        # Add images and annotations
-        ann_id = 0
-        for city_folder in city_folders:
-            city_name = os.path.basename(city_folder.path)
-            
-            # Process images in this city
-            for img_file in os.listdir(city_folder.path):
-                if img_file.endswith('_leftImg8bit.png'):
-                    # Get image path
-                    img_path = os.path.join(city_folder.path, img_file)
-                    
-                    # Construct annotation path
-                    base_name = img_file.replace('_leftImg8bit.png', '')
-                    ann_file = f"{base_name}_gtFine_polygons.json"
-                    ann_path = os.path.join(self.ann_dir, city_name, ann_file)
-                    
-                    if not os.path.exists(ann_path):
-                        continue
-                    
-                    # Add image to list
-                    self.images.append(img_path)
-                    self.targets.append(ann_path)
-                    
-                    # Get image dimensions
-                    img = Image.open(img_path)
-                    width, height = img.size
-                    
-                    # Create unique image id
-                    img_id = len(self.coco_dataset['images'])
-                    
-                    # Add image info to COCO dataset
-                    self.coco_dataset['images'].append({
-                        'id': img_id,
-                        'file_name': img_file,
-                        'width': width,
-                        'height': height
-                    })
-                    
-                    # Load and process annotations
-                    with open(ann_path, 'r') as f:
-                        anno_data = json.load(f)
-                    
-                    for obj in anno_data['objects']:
-                        if obj['label'] in CITYSCAPES_CLASSES:
-                            # Only keep instances defined in our class mapping
-                            polygon = np.array(obj['polygon'])
-                            
-                            # Skip invalid polygons
-                            if len(polygon) < 3:
-                                continue
-                            
-                            # Get bounding box from polygon
-                            x_min, y_min = np.min(polygon, axis=0)
-                            x_max, y_max = np.max(polygon, axis=0)
-                            
-                            # Skip tiny objects
-                            if (x_max - x_min < 10) or (y_max - y_min < 10):
-                                continue
-                            
-                            # Convert to COCO format [x, y, width, height]
-                            bbox = [float(x_min), float(y_min), 
-                                    float(x_max - x_min), float(y_max - y_min)]
-                            
-                            # Calculate area
-                            area = float(bbox[2] * bbox[3])
-                            
-                            # Convert polygon to COCO segmentation format
-                            segmentation = [[float(p[0]), float(p[1])] for p in polygon]
-                            segmentation = [sum(segmentation, [])]  # Flatten list
-                            
-                            # Add annotation
-                            self.coco_dataset['annotations'].append({
-                                'id': ann_id,
-                                'image_id': img_id,
-                                'category_id': CITYSCAPES_CLASSES[obj['label']],
-                                'bbox': bbox,
-                                'area': area,
-                                'segmentation': segmentation,
-                                'iscrowd': 0
-                            })
-                            
-                            ann_id += 1
-        
-        # Create COCO api for evaluation
-        if self.coco_dataset['annotations']:
-            # Create a temporary file to load COCO
-            coco_json_path = f'/tmp/cityscapes_{image_set}_coco.json'
-            with open(coco_json_path, 'w') as f:
-                json.dump(self.coco_dataset, f)
-            
-            self.coco = COCO(coco_json_path)
-        else:
-            self.coco = None
-            print("WARNING: No annotations found in the dataset")
-        
-        print(f"Found {len(self.images)} image-annotation pairs in {image_set} set")
-        print(f"Added {len(self.coco_dataset['annotations'])} annotations for {len(self.coco_dataset['images'])} images")
-
-    def __len__(self):
-        return len(self.images)
-
-    def __getitem__(self, idx):
-        img_path = self.images[idx]
-        ann_path = self.targets[idx]
-        
-        # Load image
-        img = Image.open(img_path).convert("RGB")
-        w, h = img.size
-        
-        # Get image id in COCO
-        img_id = idx  # We used the index as image_id
-        
-        # Get annotations for this image
-        ann_ids = self.coco.getAnnIds(imgIds=img_id)
-        coco_anns = self.coco.loadAnns(ann_ids)
-        
-        # Extract bounding boxes and classes
-        boxes = []
-        classes = []
-        
-        for ann in coco_anns:
-            # COCO bbox format: [x, y, width, height]
-            x, y, w, h = ann['bbox']
-            boxes.append([x, y, x + w, y + h])
-            classes.append(ann['category_id'])
-        
-        # Convert to tensors
-        if boxes:
-            boxes = torch.as_tensor(boxes, dtype=torch.float32)
-            classes = torch.as_tensor(classes, dtype=torch.int64)
-        else:
-            boxes = torch.zeros((0, 4), dtype=torch.float32)
-            classes = torch.zeros((0,), dtype=torch.int64)
-        
-        # Create target compatible with DETR
-        target = {}
-        target["boxes"] = boxes
-        target["labels"] = classes
-        target["image_id"] = torch.tensor([img_id])
-        
-        # Add area and iscrowd for COCO evaluation
-        if coco_anns:
-            area = torch.tensor([ann['area'] for ann in coco_anns])
-            iscrowd = torch.tensor([ann['iscrowd'] for ann in coco_anns])
-        else:
-            area = torch.zeros((0,), dtype=torch.float32)
-            iscrowd = torch.zeros((0,), dtype=torch.int64)
-            
-        target["area"] = area
-        target["iscrowd"] = iscrowd
-        
-        # Original image size
-        target["orig_size"] = torch.as_tensor([h, w])
-        target["size"] = torch.as_tensor([h, w])
-        
-        # Apply transforms
-        if self.transforms is not None:
-            img, target = self.transforms(img, target)
-            
-        return img, target
-
-    def get_height_and_width(self, idx):
-        img_info = self.coco_dataset['images'][idx]
-        return img_info['height'], img_info['width']
-    
-
     
     
 ###############################################
@@ -416,8 +220,8 @@ def make_cityscapes_transforms(image_set):
 
     raise ValueError(f'unknown {image_set}')    
     
-    
-    
+
+
     
     
 ###############################################    
@@ -440,19 +244,11 @@ def build(image_set, args):
     elif args.dataset_file == 'coco':
         dataset = CocoDetection(img_folder, ann_file, transforms=make_kitti_transforms(image_set), return_masks=args.masks)
     
+    
     elif args.dataset_file == 'cityscapes':
-        PATHS = {
-            "train": (root / "leftImg8bit" / "train", root / "gtFine" / "train"),
-            "val": (root / "leftImg8bit" / "val", root / "gtFine" / "val"),
-        }
-        img_folder, ann_folder = PATHS[image_set]
-        dataset = CityscapesDetection(
-            img_folder, 
-            ann_folder, 
-            transforms=make_cityscapes_transforms(image_set),
-            return_masks=args.masks,
-            image_set=image_set
-        )
+        # Use COCO-format dataset structure
+        dataset = CocoDetection(img_folder, ann_file, transforms=make_cityscapes_transforms(image_set), return_masks=args.masks)
+
 
     else:
         raise ValueError(f'args.dataset_file: {args.dataset_file} is invalid.')
