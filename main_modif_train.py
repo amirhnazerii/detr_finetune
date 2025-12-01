@@ -17,6 +17,17 @@ from engine import evaluate, train_one_epoch
 from models import build_model
 
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    val = str(v).lower()
+    if val in ('yes', 'true', 't', 'y', '1'):
+        return True
+    if val in ('no', 'false', 'f', 'n', '0'):
+        return False
+    raise argparse.ArgumentTypeError('Boolean value expected (true/false).')
+
+
 def get_args_parser():
     parser = argparse.ArgumentParser('Set transformer detector', add_help=False)
     parser.add_argument('--lr', default=1e-4, type=float)
@@ -36,7 +47,7 @@ def get_args_parser():
     # * Backbone
     parser.add_argument('--backbone', default='resnet50', type=str,
                         help="Name of the convolutional backbone to use")
-    parser.add_argument('--dilation', action='store_true',
+    parser.add_argument('--dilation', default=False, type=str2bool,
                         help="If true, we replace stride with dilation in the last convolutional block (DC5)")
     parser.add_argument('--position_embedding', default='sine', type=str, choices=('sine', 'learned'),
                         help="Type of positional embedding to use on top of the image features")
@@ -109,7 +120,7 @@ def get_args_parser():
                         help="classification head added fc-layer dim")
    
     # robustness param:
-    parser.add_argument('--robust', default=False, type=bool,
+    parser.add_argument('--robust', default=False, type=str2bool,
                         help='nrobust detr training with modified loss function.')
     
     return parser
