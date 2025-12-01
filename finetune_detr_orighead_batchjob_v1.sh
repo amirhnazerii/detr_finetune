@@ -1,63 +1,140 @@
 #!/bin/bash
+# Submission helper: create and submit one SBATCH job per base model.
+# Run this script from a login node (do NOT run it via `sbatch`).
+# It will create per-model job scripts under ./sbatch_jobs/ and submit them with `sbatch`.
 
-#SBATCH --job-name=a-city_train_v4_detr_70epch
-#SBATCH --nodes=1                    # Keep it on one node to avoid inter-node communication overhead
-#SBATCH --tasks-per-node=2            # Use 4 processes per node
-#SBATCH --cpus-per-task=2             # Allocate 8 CPU cores per process
-#SBATCH --mem=100gb                   # Set 100GB memory (adjust if needed)
-#SBATCH --time=12:00:00               # 12 hours; adjust based on expected training time
-#SBATCH --gpus-per-node=a100:1
-#SBATCH --output=cityscapes_detr_orighead_finetune_v4_epch70_batchjob.out
-#SBATCH --error=cityscapes_detr_orighead_finetune_v4_epch70_batchjob.err
+set -euo pipefail
+IFS=$'\n\t'
 
+#------------------------
+# User-tweakable settings
+#------------------------
+WORKDIR="/home/anazeri/detr_finetune"
+CONDA_ENV="Detr_env1"
+MODULE_CMD="module load"   # adjust to your cluster's module command if needed
+MODULE_NAME="anaconda3/2023.09-0"
+JOB_DIR="${WORKDIR}/sbatch_jobs"
+CPUS_PER_TASK=2
+MEM="100gb"
+TIME="09:00:00"
+GPUS=1                # used with --gres=gpu:${GPUS}
+EPOCHS=50
+NUM_CLASSES=9
+DATASET="kitti"
+COCO_PATH="/scratch/anazeri/kitti_coco_format/kitti_val/"
+PYTHON_SCRIPT="main_modif_train.py"
 
-cd /home/anazeri/detr_finetune/
+#------------------------
+# Models to submit
+#------------------------
+base_model_path_list=(
+    "detr-r50-KITTI-orighead92fc.pth"
+    "detr-r50dc5-KITTI-orighead92fc.pth"
+    "detr-r101-KITTI-orighead92fc.pth"
+    "detr-r101dc5-KITTI-orighead92fc.pth"
+)
 
-module add anaconda3/2023.09-0
-source activate Detr_env1
+# Create job dir
+mkdir -p "$JOB_DIR"
 
+# Ensure sbatch exists
+if ! command -v sbatch >/dev/null 2>&1; then
+    echo "Error: sbatch not found in PATH. Run this from a login node with Slurm's sbatch available."
+    exit 2
+fi
 
-# python main_finetune_modifhead.py   --dataset_file "coco"   --coco_path "/scratch/anazeri/coco/"   --output_dir '/home/anazeri/detr_finetune/robust-detr-r50-coco-modifhead-128fc92fc-TEMP'   --resume 'detr-r50-modifhead-128fc92fc.pth'   --lr_drop 7 --backbone 'resnet50' --new_layer_dim 128 --inter_class_weight 0 --robust True  --epochs 10
-#python main_modif_train.py   --dataset_file "coco"   --coco_path "/scratch/anazeri/kitti_coco_format/kitti_val/"   --output_dir '/home/anazeri/detr_finetune/detr-r50-KITTI-orighead92fc-40epch'   --resume 'detr-r50-KITTI-orighead92fc.pth' --num_classes 9 --backbone 'resnet50'  --epochs 40
+# Helper: set config per model
+get_config() {
+    local base_model_path="$1"
+    case "$base_model_path" in
+        *r50dc5*)
+            backbone="resnet50"
+            fintuned_model_path="${WORKDIR}/detr-r50dc5-KITTI-orighead92fc-50epch"
+            dilation_required="True"
+            acronym="kt-r50dc5"
+            ;;
+        *r50*)
+            backbone="resnet50"
+            fintuned_model_path="${WORKDIR}/detr-r50-KITTI-orighead92fc-50epch"
+            dilation_required="False"
+            acronym="kt-r50"
+            ;;
+        *r101dc5*)
+            backbone="resnet101"
+            fintuned_model_path="${WORKDIR}/detr-r101dc5-KITTI-orighead92fc-50epch"
+            dilation_required="True"
+            acronym="kt-r101dc5"
+            ;;
+        *r101*)
+            backbone="resnet101"
+            fintuned_model_path="${WORKDIR}/detr-r101-KITTI-orighead92fc-50epch"
+            dilation_required="False"
+            acronym="kt-r101"
+            ;;
+        *)
+            echo "Unrecognized model pattern: $base_model_path"
+            return 1
+            ;;
+    esac
+}
 
-# ### Fine-grained:
-# python main_modif_train.py   --dataset_file "kitti"   --coco_path "/scratch/anazeri/kitti_coco_format/kitti_val/"   --output_dir '/home/anazeri/detr_finetune/detr-r50-KITTI-orighead92fc-50epch'   --resume 'detr-r50-KITTI-orighead92fc.pth' --num_classes 9 --backbone 'resnet50'  --epochs 50
+# Submit one job per model and record IDs
+declare -a SUBMITTED_JOBS=()
 
+for base_model_path in "${base_model_path_list[@]}"; do
+    get_config "$base_model_path"
 
-# ### Fine-tuned:
-# python main_modif_train.py   \
-#     --dataset_file "cityscapes" \
-#     --coco_path "/scratch/anazeri/cityscapes_coco" \
-#     --output_dir '/home/anazeri/detr_finetune/detr-orighead-r50-cityscapes-finetune-v4-70epch' \
-#     --resume 'detr-r50-cityscapes-orighead.pth' \
-#     --num_classes 8 \
-#     --backbone 'resnet50' \
-#     --epochs 70
+    job_script_path="${JOB_DIR}/${acronym}_finetune_${EPOCHS}.sh"
+    log_out="${JOB_DIR}/${acronym}_finetune_%j.out"
+    log_err="${JOB_DIR}/${acronym}_finetune_%j.err"
 
+    cat > "$job_script_path" <<EOF
+#!/bin/bash
+#SBATCH --job-name=${acronym}_finetune
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=${CPUS_PER_TASK}
+#SBATCH --mem=${MEM}
+#SBATCH --time=${TIME}
+#SBATCH --gres=gpu:a100:${GPUS}
+#SBATCH --output=${log_out}
+#SBATCH --error=${log_err}
 
-dataset="kitti"
-dataset_path="/scratch/anazeri/kitti_coco_format/kitti_val/"
-fintuned_model_path='/home/anazeri/detr_finetune/detr-r50dc5-KITTI-orighead92fc-50epch'
-base_model_path='detr-r50-cityscapes-orighead.pth'
+set -euo pipefail
 
+cd "${WORKDIR}"
+${MODULE_CMD} ${MODULE_NAME}
+# activate conda env - adjust if your cluster uses a different activation method
+source activate ${CONDA_ENV}
 
-if 'r50' in $fintuned_model_path:
-    backbone='resnet50'
-elif 'r50dc5' in $fintuned_model_path:
-    backbone='resnet50'
-elif 'r101' in $fintuned_model_path:
+python "${PYTHON_SCRIPT}" \
+    --dataset_file "${DATASET}" \
+    --coco_path "${COCO_PATH}" \
+    --output_dir "${fintuned_model_path}" \
+    --resume "${base_model_path}" \
+    --num_classes ${NUM_CLASSES} \
+    --backbone "${backbone}" \
+    --dilation ${dilation_required} \
+    --epochs ${EPOCHS}
+EOF
 
-elif 'r101dc5' in $fintuned_model_path:
+    chmod +x "$job_script_path"
+    echo "Submitting job script: $job_script_path"
+    sbatch_out=$(sbatch "$job_script_path")
+    # sbatch prints: Submitted batch job 123456
+    job_id=$(echo "$sbatch_out" | awk '{print $NF}')
+    echo "Submitted ${acronym} as job ${job_id}"
+    SUBMITTED_JOBS+=("${acronym}:${job_id}")
+done
 
-### Fine-tuned:
-python main_modif_train.py   \
-    --dataset_file $dataset \
-    --coco_path $dataset_path \
-    --output_dir $fintuned_model_path \
-    --resume $base_model_path \
-    --num_classes 9 \
-    --backbone $backbone \
-    --epochs 70
+# Summary
+printf '\nSubmitted jobs summary:\n'
+for entry in "${SUBMITTED_JOBS[@]}"; do
+    echo " - $entry"
+done
+
+echo "Job scripts are in: $JOB_DIR"
+
+echo "Done. Monitor with: squeue -u \$USER | grep $(whoami) or sacct -j <jobid>"
 
 
 
