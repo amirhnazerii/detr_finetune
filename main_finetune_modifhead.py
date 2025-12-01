@@ -287,6 +287,8 @@ def main(args):
                      'epoch': epoch,
                      'n_parameters': n_parameters}
 
+        print(test_stats, coco_evaluator)
+        
         if args.output_dir and utils.is_main_process():
             with (output_dir / "log.txt").open("a") as f:
                 f.write(json.dumps(log_stats) + "\n")
@@ -320,6 +322,11 @@ if __name__ == '__main__':
 # python main_modif_train.py   --dataset_file "coco"   --coco_path '/home/anazeri/fiftyone/kitti_coco/'   --output_dir '/home/anazeri/detr_finetune/outputs12022023_R50DC5_kitti_img6481_epch25'   --resume "detr-r50-dc5_no-class-head.pth"   --num_classes 10   --lr 1e-5   --lr_backbone 1e-6 --backbone 'resnet50' --dilation  --epochs 25 --batch_size 2
 
 # python main_finetune_modifhead.py   --dataset_file "coco"   --coco_path "/scratch/anazeri/coco/"   --output_dir '/home/anazeri/detr_finetune/detr-r50-coco-modifhead-128fc92fc-epoch10'   --resume 'detr-r50-modifhead-128fc92fc.pth'   --lr_drop 5 --backbone 'resnet50'  --epochs 10
+
+
+
+
+# python main_finetune_modifhead.py   --dataset_file "coco"   --coco_path "/scratch/anazeri/kitti_coco_format/kitti_val/"   --output_dir '/home/anazeri/detr_finetune/detr-r50-KITTI-orighead92fc'   --resume 'detr-r50-KITTI-orighead92fc.pth' --num_classes 9 --lr_drop 5 --backbone 'resnet50'  --epochs 10
 
 
 # ```bash
