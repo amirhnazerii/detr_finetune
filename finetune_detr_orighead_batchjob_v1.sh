@@ -10,15 +10,16 @@ IFS=$'\n\t'
 # User-tweakable settings
 #------------------------
 WORKDIR="/home/anazeri/detr_finetune"
+OUTPUT_PATH="/scratch/anazeri/detr_finetune/output"
 CONDA_ENV="Detr_env1"
 MODULE_CMD="module load"   # adjust to your cluster's module command if needed
 MODULE_NAME="anaconda3/2023.09-0"
 JOB_DIR="${WORKDIR}/sbatch_jobs"
 CPUS_PER_TASK=2
 MEM="100gb"
-TIME="09:00:00"
+TIME="25:00:00"
 GPUS=1                # used with --gres=gpu:${GPUS}
-EPOCHS=50
+EPOCHS=100
 NUM_CLASSES=9
 DATASET="kitti"
 COCO_PATH="/scratch/anazeri/kitti_coco_format/kitti_val/"
@@ -49,25 +50,25 @@ get_config() {
     case "$base_model_path" in
         *r50dc5*)
             backbone="resnet50"
-            fintuned_model_path="${WORKDIR}/detr-r50dc5-KITTI-orighead92fc-50epch"
+            fintuned_model_path="${OUTPUT_PATH}/detr-r50dc5-KITTI-orighead92fc-${EPOCHS}epch"
             dilation_required="True"
             acronym="kt-r50dc5"
             ;;
         *r50*)
             backbone="resnet50"
-            fintuned_model_path="${WORKDIR}/detr-r50-KITTI-orighead92fc-50epch"
+            fintuned_model_path="${OUTPUT_PATH}/detr-r50-KITTI-orighead92fc-${EPOCHS}epch"
             dilation_required="False"
             acronym="kt-r50"
             ;;
         *r101dc5*)
             backbone="resnet101"
-            fintuned_model_path="${WORKDIR}/detr-r101dc5-KITTI-orighead92fc-50epch"
+            fintuned_model_path="${OUTPUT_PATH}/detr-r101dc5-KITTI-orighead92fc-${EPOCHS}epch"
             dilation_required="True"
             acronym="kt-r101dc5"
             ;;
         *r101*)
             backbone="resnet101"
-            fintuned_model_path="${WORKDIR}/detr-r101-KITTI-orighead92fc-50epch"
+            fintuned_model_path="${OUTPUT_PATH}/detr-r101-KITTI-orighead92fc-${EPOCHS}epch"
             dilation_required="False"
             acronym="kt-r101"
             ;;
@@ -84,9 +85,9 @@ declare -a SUBMITTED_JOBS=()
 for base_model_path in "${base_model_path_list[@]}"; do
     get_config "$base_model_path"
 
-    job_script_path="${JOB_DIR}/${acronym}_finetune_${EPOCHS}.sh"
-    log_out="${JOB_DIR}/${acronym}_finetune_%j.out"
-    log_err="${JOB_DIR}/${acronym}_finetune_%j.err"
+    job_script_path="${JOB_DIR}/${acronym}_finetuned_${EPOCHS}.sh"
+    log_out="${JOB_DIR}/${acronym}_finetuned_${EPOCHS}_%j.out"
+    log_err="${JOB_DIR}/${acronym}_finetuned_${EPOCHS}_%j.err"
 
     cat > "$job_script_path" <<EOF
 #!/bin/bash
