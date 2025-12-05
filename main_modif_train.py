@@ -127,13 +127,19 @@ def get_args_parser():
 
 
 def main(args):
-    if args.world_size > 1:
-        utils.init_distributed_mode(args)  # Enable distributed mode if running on multiple GPUs
+    # Initialize distributed mode if environment or args indicate it.
+    # `init_distributed_mode` will set `args.distributed` appropriately
+    # based on environment variables (e.g. torchrun / SLURM) or return
+    # early when running single-process.
+    utils.init_distributed_mode(args)
+    if args.distributed:
         print("git:\n  {}\n".format(utils.get_sha()))
-    else:
-        args.distributed = False  # Force single GPU mode
 
-    device = torch.device(args.device)
+    # Choose device. When distributed, `init_distributed_mode` sets `args.gpu`.
+    if getattr(args, 'distributed', False):
+        device = torch.device(f'cuda:{args.gpu}')
+    else:
+        device = torch.device(args.device)
 
     # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
@@ -146,7 +152,8 @@ def main(args):
 
     model_without_ddp = model
     if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
+        # Wrap model for DDP on the local GPU
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], output_device=args.gpu)
         model_without_ddp = model.module
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)

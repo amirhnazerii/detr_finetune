@@ -107,15 +107,28 @@ ${MODULE_CMD} ${MODULE_NAME}
 # activate conda env - adjust if your cluster uses a different activation method
 source activate ${CONDA_ENV}
 
-python "${PYTHON_SCRIPT}" \
-    --dataset_file "${DATASET}" \
-    --coco_path "${COCO_PATH}" \
-    --output_dir "${fintuned_model_path}" \
-    --resume "${base_model_path}" \
-    --num_classes ${NUM_CLASSES} \
-    --backbone "${backbone}" \
-    --dilation ${dilation_required} \
-    --epochs ${EPOCHS}
+if [ "${GPUS}" -gt 1 ]; then
+    echo "Launching with torchrun for ${GPUS} GPUs"
+    torchrun --nproc_per_node=${GPUS} "${PYTHON_SCRIPT}" \
+        --dataset_file "${DATASET}" \
+        --coco_path "${COCO_PATH}" \
+        --output_dir "${fintuned_model_path}" \
+        --resume "${base_model_path}" \
+        --num_classes ${NUM_CLASSES} \
+        --backbone "${backbone}" \
+        --dilation ${dilation_required} \
+        --epochs ${EPOCHS}
+else
+    python "${PYTHON_SCRIPT}" \
+        --dataset_file "${DATASET}" \
+        --coco_path "${COCO_PATH}" \
+        --output_dir "${fintuned_model_path}" \
+        --resume "${base_model_path}" \
+        --num_classes ${NUM_CLASSES} \
+        --backbone "${backbone}" \
+        --dilation ${dilation_required} \
+        --epochs ${EPOCHS}
+fi
 EOF
 
     chmod +x "$job_script_path"
